@@ -1,39 +1,77 @@
-
 /**
- * VIOLACIÓN AL PRINCIPIO DE RESPONSABILIDAD ÚNICA (SRP)
+ * REFACTORIZADO - PRINCIPIO DE RESPONSABILIDAD ÚNICA (SRP)
  * 
- * Este archivo muestra una clase "Dios" o un componente que hace demasiadas cosas.
- * En el contexto de la Reserva Ecológica, el ProductBloc gestiona el inventario de la tienda
- * de souvenirs y, al mismo tiempo, se encarga de las notificaciones por correo.
+ * Ahora el ProductBloc tiene UNA ÚNICA responsabilidad:
+ * Gestionar la lógica de negocio del inventario de productos de la tienda de souvenirs.
+ * 
+ * Las responsabilidades de persistencia y notificaciones están delegadas a servicios especializados.
  */
 
-interface Product {
-    id: number;
-    name: string;
-}
+import { IProductRepository, Product } from './product-repository';
+import { INotificationService } from './notification-service';
 
+/**
+ * ProductBloc: Responsabilidad única - Lógica de negocio del inventario
+ * 
+ * Inyectamos las dependencias (Repository y NotificationService) como parámetros,
+ * lo que permite:
+ * - Fácil testing (mock de dependencias)
+ * - Cambiar implementaciones sin modificar ProductBloc
+ * - Máxima cohesión y mínimo acoplamiento
+ */
 export class ProductBloc {
 
-    private products: Product[] = [];
+    constructor(
+        private readonly productRepository: IProductRepository,
+        private readonly notificationService: INotificationService
+    ) {}
 
-    // Responsabilidad 1: Carga de productos (Lógica de Negocio/Persistencia)
-    loadProduct(id: number) {
-        console.log(`Cargando producto con ID: ${id} desde el inventario del parque...`);
-        // Simulación de carga
-        return this.products.find(p => p.id === id);
+    /**
+     * Cargar un producto del repositorio
+     * Responsabilidad: lógica de negocio
+     */
+    loadProduct(id: number): Product | undefined {
+        console.log(`[ProductBloc] Cargando producto con ID: ${id}`);
+        const product = this.productRepository.findById(id);
+        
+        if (!product) {
+            console.log(`[ProductBloc] Producto no encontrado`);
+            return undefined;
+        }
+
+        console.log(`[ProductBloc] Producto encontrado: ${product.name}`);
+        return product;
     }
 
-    // Responsabilidad 2: Guardado de productos (Lógica de Persistencia)
-    saveProduct(product: Product) {
-        console.log(`Guardando el producto ${product.name} en la base de datos de la reserva...`);
-        this.products.push(product);
+    /**
+     * Guardar un nuevo producto
+     * Responsabilidad: orquestar la persistencia
+     */
+    saveProduct(product: Product): void {
+        console.log(`[ProductBloc] Iniciando guardado de producto: ${product.name}`);
+        this.productRepository.save(product);
     }
 
-    // Responsabilidad 3: Envío de notificaciones (Servicio de Infraestructura)
-    // ESTA ES LA VIOLACIÓN: El Bloc no debería saber CÓMO enviar correos electrónicos.
-    notifyCustomer(email: string, message: string) {
-        console.log(`[Mailer] Enviando correo a ${email}: ${message}`);
-        // Lógica directa de envío de correo acoplada aquí
+    /**
+     * Notificar a un cliente sobre una acción (ej. producto disponible)
+     * Responsabilidad: orquestar notificaciones
+     * 
+     * NOTA: El ProductBloc NO conoce los detalles de cómo se envía la notificación.
+     * Simplemente delega al servicio inyectado.
+     */
+    notifyCustomerAboutProduct(email: string, productName: string): void {
+        const message = `El producto "${productName}" está disponible en nuestra tienda de souvenirs.`;
+        console.log(`[ProductBloc] Iniciando notificación al cliente`);
+        this.notificationService.notify(email, message);
+    }
+
+    /**
+     * Obtener inventario completo
+     * Responsabilidad: orquestar consulta
+     */
+    getInventory(): Product[] {
+        console.log(`[ProductBloc] Obteniendo inventario completo`);
+        return this.productRepository.getAll();
     }
 
 }
