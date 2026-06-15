@@ -1,28 +1,73 @@
 
 /**
- * VIOLACIÓN AL PRINCIPIO DE INVERSIÓN DE DEPENDENCIAS (DIP)
+ * REFACTORIZADO - PRINCIPIO DE INVERSIÓN DE DEPENDENCIAS (DIP)
  * 
- * El servicio de publicaciones depende de una implementación concreta
- * en lugar de una abstracción.
+ * PostService ahora depende de una abstracción (IPostRepository),
+ * no de una implementación concreta (LocalDatabaseService).
+ * 
+ * DIP: Los módulos de alto nivel no deben depender de módulos de bajo nivel.
+ * Ambos deben depender de abstracciones.
  */
 
-import { LocalDatabaseService } from '../data/local-database';
+import { IPostRepository, Post } from '../data/local-database';
 
+/**
+ * PostService - Servicio de publicaciones para la reserva
+ * 
+ * Inyectamos el repositorio como dependencia en el constructor.
+ * Esto permite:
+ * - Cambiar entre LocalDatabaseService, JsonDatabaseService, ApiDatabaseService sin modificar PostService
+ * - Testing fácil con un mock/stub de IPostRepository
+ * - Máxima flexibilidad y testabilidad
+ */
 export class PostService {
 
-    private posts: any[] = [];
+    private posts: Post[] = [];
 
-    async getPosts() {
-        /**
-         * VIOLACIÓN: Instanciación directa de una dependencia.
-         * No podemos inyectar un proveedor diferente (como JsonDatabaseService)
-         * sin modificar el constructor o este método. 
-         * El nivel superior (PostService) depende del nivel inferior (LocalDatabaseService).
-         */
-        const databaseProvider = new LocalDatabaseService();
-        this.posts = await databaseProvider.getFakePosts();
+    /**
+     * Inyección de dependencia: PostService recibe el repositorio como parámetro
+     * No lo instancia directamente. Respeta completamente DIP.
+     */
+    constructor(private readonly postRepository: IPostRepository) {}
 
-        return this.posts;
+    /**
+     * Obtener todos los posts disponibles
+     */
+    async getPosts(): Promise<Post[]> {
+        console.log('[PostService] Obteniendo posts desde el repositorio inyectado...');
+        
+        try {
+            this.posts = await this.postRepository.getPosts();
+            console.log(`[PostService] Se obtuvieron ${this.posts.length} posts`);
+            return this.posts;
+        } catch (error) {
+            console.error('[PostService] Error al obtener posts:', error);
+            return [];
+        }
     }
 
+    /**
+     * Obtener un post específico por ID
+     */
+    getPostById(id: number): Post | undefined {
+        console.log(`[PostService] Buscando post con ID ${id}`);
+        return this.posts.find(post => post.id === id);
+    }
+
+    /**
+     * Buscar posts por título (contiene la cadena)
+     */
+    searchByTitle(query: string): Post[] {
+        console.log(`[PostService] Buscando posts con título que contenga: "${query}"`);
+        return this.posts.filter(post => 
+            post.title.toLowerCase().includes(query.toLowerCase())
+        );
+    }
+
+    /**
+     * Obtener cantidad total de posts
+     */
+    getTotalCount(): number {
+        return this.posts.length;
+    }
 }
